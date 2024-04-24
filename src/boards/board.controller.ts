@@ -3,51 +3,71 @@ import {
   Controller,
   Delete,
   Get,
+  Logger,
   Param,
+  ParseIntPipe,
   Patch,
   Post,
+  UseGuards,
   UsePipes,
   ValidationPipe,
 } from '@nestjs/common';
 import { BoardsService } from './boards.service';
-import { Board, BoardStatus } from './boards.model';
+import { BoardStatus } from './boards.model';
+import { Board } from './board.entity';
 import { CreateBoardDto } from './dto/create-board.dto';
+import { BoardStatusValidationPipe } from './pipes/board-status-validation.pipe';
+import { AuthGuard } from '@nestjs/passport';
+import { User } from 'src/auth/user.entity';
+import { GetUser } from 'src/auth/get-user.decorator';
 
 @Controller('boards')
+@UseGuards(AuthGuard())
 export class BoardsController {
-  // boardService: BoardsService;
-  // constructor(boardService: BoardsService) {
-  //   this.boardService = boardService;
-  // }
-
+  private logger = new Logger('BoardController');
   constructor(private boardService: BoardsService) {}
-
-  @Get()
-  getAllBoard(): Board[] {
-    return this.boardService.getAllBoards();
-  }
 
   @Post()
   @UsePipes(ValidationPipe)
-  createBoard(@Body() createBoardDto: CreateBoardDto): Board {
-    return this.boardService.createBoard(createBoardDto);
+  createBoard(
+    @Body() createBoardDto: CreateBoardDto,
+    @GetUser() user: User,
+  ): Promise<Board> {
+    this.logger.verbose(
+      `User ${user.username} creating a new board. Payload: ${JSON.stringify(createBoardDto)}`,
+    );
+    return this.boardService.createBoard(createBoardDto, user);
+  }
+
+  @Get()
+  getAllBoards(): Promise<Board[]> {
+    return this.boardService.getAllBoards();
+  }
+
+  @Get('/user')
+  getAllBoardsById(@GetUser() user: User): Promise<Board[]> {
+    this.logger.verbose(`User ${user.username} trying to get all boards`);
+    return this.boardService.getAllBoardsById(user);
   }
 
   @Get('/:id')
-  getBoardById(@Param('id') id: string): Board {
+  getBoardById(@Param('id') id: number): Promise<Board> {
     return this.boardService.getBoardById(id);
   }
 
   @Delete('/:id')
-  deleteBoardById(@Param('id') id: string): void {
-    this.boardService.deleteBoardById(id);
+  deleteBoard(
+    @Param('id', ParseIntPipe) id,
+    @GetUser() user: User,
+  ): Promise<void> {
+    return this.boardService.deleteBoard(id, user);
   }
 
   @Patch('/:id/status')
   updateBoardStatus(
-    @Param('id') id: string,
-    @Body('status') status: BoardStatus,
-  ): Board {
+    @Param('id', ParseIntPipe) id: number,
+    @Body('status', BoardStatusValidationPipe) status: BoardStatus,
+  ) {
     return this.boardService.updateBoardStatus(id, status);
   }
 }
